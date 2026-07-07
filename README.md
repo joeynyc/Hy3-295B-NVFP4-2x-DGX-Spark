@@ -10,7 +10,7 @@ Serve **Tencent Hunyuan 3 (295B MoE, 21B active)** across two DGX Spark (GB10) n
 
 | Metric | Result |
 |---|---|
-| Single-stream decode | **26–27 tok/s** |
+| Single-stream decode | **~26 tok/s** end-to-end¹ |
 | 4 concurrent streams | **60 tok/s aggregate** (15 tok/s each) |
 | Context window | **262,144 tokens** (model's native max) |
 | KV cache pool | **~414K tokens** (TurboQuant 8-bit K / 4-bit V) |
@@ -18,6 +18,8 @@ Serve **Tencent Hunyuan 3 (295B MoE, 21B active)** across two DGX Spark (GB10) n
 | Prefill | ~500 tok/s |
 | Time to first token (short prompt) | ~350–450 ms |
 | Cold model load | ~10 min |
+
+¹ *Conservative methodology: our benchmark divides 200 completion tokens by total wall-clock **including prefill and TTFT**. Pure decode rate (tokens ÷ generation time, as most tools report) measures 28–30 tok/s on this setup. Reproduce with `scripts/hy3ctl bench` — run twice, first is warmup.*
 
 Every number here was benchmarked on 2× DGX Spark connected over 200 GbE RoCE. See [docs/FINDINGS.md](docs/FINDINGS.md) for the full experimental log — including the configurations we tested and **rejected**, with data.
 
@@ -141,6 +143,7 @@ For long-running agents: prefix caching is enabled, so a stable system prompt ma
 
 - [NVIDIA spark-vllm-docker playbook](https://github.com/NVIDIA/dgx-spark-playbooks) — container build + cluster launcher foundation
 - Tencent Hunyuan team — the model; vLLM project — the engine
+- [MiaAI-Lab/Hy3-Dual-DGX-Spark](https://github.com/MiaAI-Lab/Hy3-Dual-DGX-Spark) — parallel effort on the same problem; their README first documented the DGX Spark `earlyoom` trap
 - The dual-Spark community on X for the running head-to-heads that keep everyone honest
 
 ## License
