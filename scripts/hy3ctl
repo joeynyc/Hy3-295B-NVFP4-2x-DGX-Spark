@@ -1,0 +1,33 @@
+#!/bin/bash
+# hy3ctl — control/observe the Hy3-NVFP4 vLLM cluster on 2x DGX Spark
+# Usage: hy3ctl {status|bench|logs|start-tp2|start-pp2|stop}
+set -u
+NODE2=10.100.112.1
+API=http://127.0.0.1:8000
+case "${1:-status}" in
+  status)
+    echo "== API =="
+    curl -s -m 3 "$API/v1/models" | jq -r ".data[0].id" 2>/dev/null || echo "API not responding"
+    echo "== Ray =="
+    docker exec vllm_node ray status 2>/dev/null | sed -n "/Active:/,/Pending:/p"
+    echo "== Memory (head / node2) =="
+    free -h | awk "NR==2{print \"head: used \" \$3 \" avail \" \$7}"; swapon --show --noheadings | awk "{print \"head swap used: \" \$4}"
+    ssh -o ConnectTimeout=3 $NODE2 "free -h | awk \"NR==2{print \\\"node2: used \\\" \\\$3 \\\" avail \\\" \\\$7}\"; swapon --show --noheadings | awk \"{print \\\"node2 swap used: \\\" \\\$4}\"" 2>/dev/null
+    echo "== Cluster link MTU =="
+    ip link show enp1s0f1np1 | grep -o "mtu [0-9]*"
+    ;;
+  bench)
+    start=$(date +%s.%N)
+    out=$(curl -s -m 300 "$API/v1/completions" -H "Content-Type: application/json" \
+      -d "{\"model\":\"/models/Hy3-NVFP4\",\"prompt\":\"Write a detailed essay about the history of computing:\",\"max_tokens\":200,\"temperature\":0}")
+    end=$(date +%s.%N)
+    toks=$(echo "$out" | jq -r ".usage.completion_tokens")
+    el=$(echo "$end - $start" | bc)
+    echo "completion_tokens=$toks elapsed=${el}s tok/s=$(echo "scale=1; $toks / $el" | bc)"
+    ;;
+  logs) docker logs -f --tail 50 vllm_node ;;
+  start-tp2) cd ~/spark-vllm-docker && ./launch-cluster.sh --launch-script examples/hy3-nvfp4-tp2-tuned.sh -d ;;
+  start-pp2) cd ~/spark-vllm-docker && ./launch-cluster.sh --launch-script examples/hy3-nvfp4-pp2-tuned.sh -d ;;
+  stop) docker exec vllm_node pkill -f "vllm serve" 2>/dev/null; echo "vllm serve stopped (container + ray left running)" ;;
+  *) echo "usage: hy3ctl {status|bench|logs|start-tp2|start-pp2|stop}"; exit 1 ;;
+esac

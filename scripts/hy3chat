@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""Streaming chat REPL for Hy3-NVFP4 on the 2x Spark cluster, with tok/s readout."""
+import json
+import sys
+import time
+
+import httpx
+
+ENDPOINT = "http://localhost:8000/v1/chat/completions"
+MODEL = "/models/Hy3-NVFP4"
+
+DIM = "\033[2m"; RESET = "\033[0m"
+CYAN = "\033[36m"; GREEN = "\033[32m"; YELLOW = "\033[33m"; MAGENTA = "\033[35m"
+
+HELP = f"""{DIM}commands: /reset /system <msg> /think /nothink /save <file> /quit{RESET}"""
+
+DEFAULT_SYSTEM = (
+    "You are a helpful assistant. Always respond in the same language the user "
+    "writes in. If the user writes in English, respond only in English."
+)
+
+
+def stream_reply(history, think):
+    payload = {
+        "model": MODEL,
+        "messages": list(history),
+        "stream": True,
+        "temperature": 0.7,
+        "max_tokens": 4096,
+        "stream_options": {"include_usage": True},
+        "chat_template_kwargs": {"enable_thinking": think},
+    }
+
+    print(f"{MAGENTA}assistant>{RESET} ", end="", flush=True)
+    try:
+        _stream(payload, locals_out := {})
+    except httpx.ConnectError:
+        print(f"{YELLOW}server not reachable at {ENDPOINT} — still loading? check: hy3ctl status{RESET}")
+        return None
+    except httpx.HTTPError as e:
+        print(f"{YELLOW}request failed: {e}{RESET}")
+        return None
+    return locals_out.get("result")
+
+
+def _stream(payload, out):
+    t0 = time.time()
+    ttft = None
+    completion_tokens = 0
+    prompt_tokens = 0
+    full = ""
+    reasoning_chars = 0
+    answer_chars = 0
+    in_reasoning = False
+    with httpx.Client(timeout=None) as client:
+        with client.stream("POST", ENDPOINT, json=payload) as r:
+            if r.status_code != 200:
+                print(f"\n{YELLOW}http {r.status_code}: {r.read().decode()[:300]}{RESET}")
+                return
+            for line in r.iter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data.strip() == "[DONE]":
+                    break
+                try:
+                    j = json.loads(data)
+                except Exception:
+                    continue
+                usage = j.get("usage")
+                if usage:
+                    completion_tokens = usage.get("completion_tokens", completion_tokens)
+                    prompt_tokens = usage.get("prompt_tokens", prompt_tokens)
+                choices = j.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {})
+                thought = delta.get("reasoning_content") or ""
+                content = delta.get("content") or ""
+                if thought:
+                    if ttft is None:
+                        ttft = time.time() - t0
+                    if not in_reasoning:
+                        sys.stdout.write(f"{DIM}")
+                        in_reasoning = True
+                    reasoning_chars += len(thought)
+                    sys.stdout.write(thought)
+                    sys.stdout.flush()
+                if content:
+                    if ttft is None:
+                        ttft = time.time() - t0
+                    if in_reasoning:
+                        sys.stdout.write(f"{RESET}\n")
+                        in_reasoning = False
+                    answer_chars += len(content)
+                    full += content
+                    sys.stdout.write(content)
+                    sys.stdout.flush()
+    if in_reasoning:
+        sys.stdout.write(RESET)
+
+    elapsed = time.time() - t0
+    gen = elapsed - (ttft or 0)
+    chars = reasoning_chars + answer_chars
+    tokens = completion_tokens or max(1, chars // 4)
+    tps = tokens / gen if gen > 0.01 else 0.0
+    think_pct = (100 * reasoning_chars // chars) if chars else 0
+    print(
+        f"\n{DIM}└─ {tokens} tok ({think_pct}% thinking)  ·  "
+        f"{tps:.1f} tok/s  ·  "
+        f"ttft {ttft*1000:.0f} ms  ·  "
+        f"total {elapsed:.2f}s  ·  "
+        f"prompt {prompt_tokens} tok{RESET}\n"
+    )
+    out["result"] = full
+
+
+def main():
+    print(f"{CYAN}Hy3-NVFP4 @ 2x DGX Spark — {ENDPOINT}{RESET}")
+    print(HELP)
+    history = [{"role": "system", "content": DEFAULT_SYSTEM}]
+    think = True
+
+    while True:
+        try:
+            user = input(f"{GREEN}you>{RESET} ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not user:
+            continue
+
+        if user in ("/quit", "/exit", "/q"):
+            break
+        if user == "/reset":
+            history = [{"role": "system", "content": DEFAULT_SYSTEM}]
+            print(f"{DIM}history cleared{RESET}")
+            continue
+        if user == "/think":
+            think = True
+            print(f"{DIM}thinking mode: ON{RESET}")
+            continue
+        if user == "/nothink":
+            think = False
+            print(f"{DIM}thinking mode: OFF{RESET}")
+            continue
+        if user.startswith("/system "):
+            sysmsg = user[len("/system "):].strip()
+            history = [h for h in history if h["role"] != "system"]
+            history.insert(0, {"role": "system", "content": sysmsg})
+            print(f"{DIM}system prompt set{RESET}")
+            continue
+        if user.startswith("/save "):
+            path = user.split(" ", 1)[1].strip()
+            with open(path, "w") as f:
+                json.dump(history, f, indent=2)
+            print(f"{DIM}saved → {path}{RESET}")
+            continue
+        if user.startswith("/"):
+            print(HELP)
+            continue
+
+        history.append({"role": "user", "content": user})
+        reply = stream_reply(history, think)
+        if reply is None:
+            history.pop()
+        else:
+            history.append({"role": "assistant", "content": reply})
+
+
+if __name__ == "__main__":
+    main()
