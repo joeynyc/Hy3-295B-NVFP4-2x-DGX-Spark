@@ -61,7 +61,7 @@ Everything in the default profile is the *winner* of a measured A/B:
 - 2× DGX Spark linked over the 200 GbE fabric, cluster IPs reachable (e.g. `10.100.112.1` ↔ `10.100.112.2`)
 - Docker with GPU support, passwordless SSH head → worker
 - A vLLM image with GB10 (sbsa/CUDA 13) support and `HYV3ForCausalLM` registered — build one with [NVIDIA's spark-vllm-docker playbook](https://github.com/NVIDIA/dgx-spark-playbooks) (what we run), or try `nvcr.io/nvidia/vllm:26.06-py3` (public, arm64, ships HYV3 + TurboQuant; not the image our benchmarks used)
-- The model on both nodes at the same path (default `~/models/Hy3-NVFP4`)
+- The model — [0xSero/Hy3-299B-NVFP4](https://huggingface.co/0xSero/Hy3-299B-NVFP4) — on both nodes at the same path (default `~/models/Hy3-NVFP4`)
 - ~180 GB free disk per node
 
 ### Configure & launch
@@ -142,6 +142,7 @@ For long-running agents: prefix caching is enabled, so a stable system prompt ma
 ## Credits
 
 - [NVIDIA spark-vllm-docker playbook](https://github.com/NVIDIA/dgx-spark-playbooks) — container build + cluster launcher foundation
+- [0xSero](https://huggingface.co/0xSero) — the [Hy3-299B-NVFP4 quant](https://huggingface.co/0xSero/Hy3-299B-NVFP4) this entire setup runs on
 - Tencent Hunyuan team — the model; vLLM project — the engine
 - [MiaAI-Lab/Hy3-Dual-DGX-Spark](https://github.com/MiaAI-Lab/Hy3-Dual-DGX-Spark) — parallel effort on the same problem; their README first documented the DGX Spark `earlyoom` trap
 - The dual-Spark community on X for the running head-to-heads that keep everyone honest

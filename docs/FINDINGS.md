@@ -61,6 +61,6 @@ Nothing pages — vLLM pre-allocates the whole KV pool at startup, and ~37 GB of
 - 256K native max (`--max-model-len 262144` + `VLLM_ALLOW_LONG_MAX_MODEL_LEN`); beyond native = RoPE extrapolation, unvalidated for this checkpoint, and the KV wouldn't fit at fp8 anyway.
 - Concurrency scales well for an MoE: 1 stream = 27 tok/s; 4 streams = 15 each (60 total). `--max-num-seqs` is the knob.
 - First post-restart benchmark is warmup (~4× slow). Always measure twice.
-- Model quant used here: 0xSero NVFP4 of `tencent/Hy3-preview` — the *preview* checkpoint, not the final release. A final-release quant is the biggest available quality upgrade.
+- Model quant used here: [0xSero/Hy3-299B-NVFP4](https://huggingface.co/0xSero/Hy3-299B-NVFP4), an NVFP4 quant of `tencent/Hy3-preview` — the *preview* checkpoint, not the final release. A final-release quant is the biggest available quality upgrade.
 - Tool calling (`hy_v3` parser) verified: correct `tool_calls` finish, clean JSON args.
 - Without a system prompt the model tends to answer in Chinese. Ship a system prompt.
