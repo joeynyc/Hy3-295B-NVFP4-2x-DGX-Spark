@@ -2,6 +2,10 @@
 
 Serve **Tencent Hunyuan 3 (295B MoE, 21B active)** across two DGX Spark (GB10) nodes with vLLM + Ray — tuned, benchmarked, and documented decision-by-decision.
 
+![4 concurrent streams, live at 1x speed](docs/demo.gif)
+
+*Four concurrent prompts streaming live at 1× speed — [full video](https://github.com/joeynyc/Hy3-295B-NVFP4-2x-DGX-Spark/releases/download/v1.0.0/hy3-quad-stream-pro.mp4).*
+
 **Measured on this exact setup** (not projected):
 
 | Metric | Result |
